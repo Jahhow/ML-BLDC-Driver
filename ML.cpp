@@ -66,28 +66,33 @@ int main()
 
         for (size_t i = 1; i <= epoch; i++)
         {
-            printf("  Epoch %d: ", i);
+            printf("  Epoch %2d: ", i);
             for (size_t iarr = 0; iarr < ARRLEN; iarr++)
             {
                 int direction = 1;
-                int v = 1;
                 int loseDiff;
+                int v = 1;
                 lose = Lose();
+                //printf("\n iarr: %u, Lose %d ", iarr, lose);
                 for (size_t iInnerEpoch = 0; iInnerEpoch < innerEpoch; iInnerEpoch++)
                 {
                     uint8_t oldCurPwm = pwm[iarr];
                     pwm[iarr] = max(min((int)oldCurPwm + v, 255), 0);
                     int newLose = Lose();
                     loseDiff = newLose - lose;
-                    if (loseDiff > 0)
+                    //printf("%d ", newLose);
+                    if (loseDiff >= 0)
                     {
                         pwm[iarr] = oldCurPwm;
                         direction = -direction;
                     }
+                    lose = newLose;
+                    if (loseDiff == 0)
+                        break;
                     v = direction * abs(loseDiff);
                 }
             }
-            printf("Lose: %d\n", lose);
+            printf("Lose: %4d\n", Lose());
         }
         puts("  Done");
         printArrayDiff(target, pwm, ARRLEN);
