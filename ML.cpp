@@ -17,7 +17,7 @@ int getRand()
     return dis(engine);
 }
 
-int Lose()
+int Loss()
 {
     int sum = 0;
     for (size_t i = 0; i < ARRLEN; i++)
@@ -72,13 +72,13 @@ int main()
                 int direction = 1;
                 int loseDiff;
                 int v = 1;
-                lose = Lose();
-                //printf("\n iarr: %u, Lose %d ", iarr, lose);
+                lose = Loss();
+                //printf("\n iarr: %u, Loss %d ", iarr, lose);
                 for (size_t iInnerEpoch = 0; iInnerEpoch < innerEpoch; iInnerEpoch++)
                 {
                     uint8_t oldCurPwm = pwm[iarr];
                     pwm[iarr] = max(min((int)oldCurPwm + v, 255), 0);
-                    int newLose = Lose();
+                    int newLose = Loss();
                     loseDiff = newLose - lose;
                     //printf("%d ", newLose);
                     if (loseDiff >= 0)
@@ -92,7 +92,7 @@ int main()
                     v = direction * abs(loseDiff);
                 }
             }
-            printf("Lose: %4d\n", Lose());
+            printf("Loss: %4d\n", Loss());
         }
         puts("  Done");
         printArrayDiff(target, pwm, ARRLEN);

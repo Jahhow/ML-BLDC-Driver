@@ -9,8 +9,8 @@
 byte bldc_step = 0, motor_speed;
 unsigned int i;
 void setup() {
-  DDRD = 0b111000; // Configure pins 3, 4 and 5 as outputs (PWM function is available on pins 3, 5, 6, 9, 10, 11)
-  DDRB = 0b1110;   // Configure pins 9, 10 and 11 as outputs
+  DDRB = 0b1110;   // Configure pins 9(OC1A), 10(OC1B) and 11(OC2A) as outputs.  Used as PWM pins.
+  DDRD = 0b111000; // Configure pins 3, 4 and 5 as outputs.  Use as normal pins.
 
   // Timer1 (no prescaling)
   TCCR1B = 1;
@@ -90,33 +90,33 @@ void loop() {
 }
 
 void BEMF_A_RISING() {
-  ADCSRB = (0 << ACME);    // Select AIN1 (Pin7) as comparator negative input
+  ADCSRB = 0;    // Select AIN1 (Pin7) as comparator negative input
   ACSR |= 3;            // Set interrupt on rising edge
 }
 void BEMF_A_FALLING() {
-  ADCSRB = (0 << ACME);    // Select AIN1 (Pin7) as comparator negative input
+  ADCSRB = 0;    // Select AIN1 (Pin7) as comparator negative input
   ACSR &= ~1;           // Set interrupt on falling edge
 }
 void BEMF_B_RISING() {
-  ADCSRA = (0 << ADEN);   // Disable the ADC module
+  ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 2;              // Select analog channel 2 (A2) as comparator negative input
   ACSR |= 3;
 }
 void BEMF_B_FALLING() {
-  ADCSRA = (0 << ADEN);   // Disable the ADC module
+  ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 2;              // Select analog channel 2 (A2) as comparator negative input
   ACSR &= ~1;
 }
 void BEMF_C_RISING() {
-  ADCSRA = (0 << ADEN);   // Disable the ADC module
+  ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 3;              // Select analog channel 3 (A3) as comparator negative input
   ACSR |= 3;
 }
 void BEMF_C_FALLING() {
-  ADCSRA = (0 << ADEN);   // Disable the ADC module
+  ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 3;              // Select analog channel 3 (A3) as comparator negative input
   ACSR &= ~1;
@@ -125,40 +125,36 @@ void BEMF_C_FALLING() {
 ////////////////////////////////////////////////
 
 void AH_BL() {
-  PORTD &= ~0b101000;
-  PORTD |=  0b010000;
-  TCCR1A =  0;            // Turn pin 11 (OC2A) PWM ON (pin 9 & pin 10 OFF)
-  TCCR2A =  0x81;         //
+  PORTD  = 1 << 4; // pin 4 on
+  TCCR1A = 0;            // pin 9, 10 OFF
+  TCCR2A = 0x81;         // pin 11 (OC2A) PWM ON
 }
 void AH_CL() {
-  PORTD &= ~0b110000;
-  PORTD |=  0b001000;
-  TCCR1A =  0;            // Turn pin 11 (OC2A) PWM ON (pin 9 & pin 10 OFF)
-  TCCR2A =  0x81;         //
+  PORTD  = 1 << 3; // pin 3 on
+  TCCR1A = 0;
+  TCCR2A = 0x81;
 }
+
 void BH_CL() {
-  PORTD &= ~0b110000;
-  PORTD |=  0b001000;
-  TCCR2A =  0;            // Turn pin 10 (OC1B) PWM ON (pin 9 & pin 11 OFF)
-  TCCR1A =  0x21;         //
+  PORTD  = 1 << 3; // pin 3 on
+  TCCR1A = 0x21;         // pin 9  OFF, pin 10 (OC1B) PWM ON,
+  TCCR2A = 0;            // pin 11 OFF
 }
 void BH_AL() {
-  PORTD &= ~0b011000;
-  PORTD |=  0b100000;
-  TCCR2A =  0;            // Turn pin 10 (OC1B) PWM ON (pin 9 & pin 11 OFF)
-  TCCR1A =  0x21;         //
+  PORTD  = 1 << 5; // pin 5 on
+  TCCR1A = 0x21;
+  TCCR2A = 0;
 }
+
 void CH_AL() {
-  PORTD &= ~0b011000;
-  PORTD |=  0b100000;
-  TCCR2A =  0;            // Turn pin 9 (OC1A) PWM ON (pin 10 & pin 11 OFF)
-  TCCR1A =  0x81;         //
+  PORTD  = 1 << 5; // pin 5 on
+  TCCR1A = 0x81;         // pin 9 (OC1A) PWM ON, pin 10 OFF
+  TCCR2A = 0;            // pin 11 OFF
 }
 void CH_BL() {
-  PORTD &= ~0b101000;
-  PORTD |=  0b010000;
-  TCCR2A =  0;            // Turn pin 9 (OC1A) PWM ON (pin 10 & pin 11 OFF)
-  TCCR1A =  0x81;         //
+  PORTD  = 1 << 4; // pin 4 on
+  TCCR1A = 0x81;
+  TCCR2A = 0;
 }
 
 void SET_PWM_DUTY(byte duty) {
