@@ -3,21 +3,35 @@
 #define SPEED_UP          A0 // BLDC motor speed-up button
 #define SPEED_DOWN        A1 // BLDC motor speed-down button
 #define SoundSensorPin    A5 // this pin read the analog voltage from the sound level meter
-#define PWM_MAX_DUTY      255
+#define PWM_MAX_DUTY     255
 #define PWM_MIN_DUTY      50
 #define PWM_START_DUTY    100
-#define VREF              5.0// voltage on AREF pin,default:operating voltage
+#define ARRLEN            64
+#define VREF             5.0 // voltage on AREF pin,default:operating voltage
 
-float getDbValue(){
-  return analogRead(SoundSensorPin) / 1024.0 * VREF * 50.0;
+#define getOriginalSoundLevel analogRead(SoundSensorPin) // (int) 0 ~ 1023
+
+float getDbValue() {
+  return getOriginalSoundLevel / 1024.0 * VREF * 50.0;
 }
-void printDbValue(){
+void printDbValue() {
   Serial.print(getDbValue(), 1); // print to 1 decimal places
   Serial.println(" dBA");
 }
+void printOriginalSoundLevel() {
+  Serial.print("Sound Level: ");
+  Serial.println(getOriginalSoundLevel);
+}
+int Loss() {
+  return getOriginalSoundLevel;
+}
 
-byte bldc_step = 0, pwm_duty;
-unsigned int commutationCounter=0;
+byte bldc_step = 0, pwm_duty=PWM_START_DUTY;
+unsigned int commutationCounter = 0;
+uint8_t pwm[ARRLEN];
+int innerEpoch = 5;
+int lose;
+size_t iarr = 0;
 
 void setup() {
   DDRB = 0b1110;   // Configure pins 9(OC1A), 10(OC1B) and 11(OC2A) as outputs.  Used as PWM pins.
@@ -34,21 +48,21 @@ void setup() {
   pinMode(SPEED_UP,   INPUT_PULLUP);
   pinMode(SPEED_DOWN, INPUT_PULLUP);
 
-  Serial.begin(115200);
+  //Serial.begin(115200);
 }
 // Analog comparator ISR
 ISR (ANALOG_COMP_vect) {
   // BEMF debounce
-  for (i = 0; i < 10; i++) {
-    while ((bldc_step & 1) != (ACSR & (1 << ACO))) // ACO: Analog Comparator Output
+  for (int i = 0; i < 10; i++) {
+    while ((bldc_step & 1) != ((ACSR >> ACO) & 1)) // ACO: Analog Comparator Output
       ;
   }
   bldc_move();
   bldc_step = (bldc_step + 1) % 6;
-  if(++commutationCounter>1000){
-    printDbValue();
+  /*if (++commutationCounter > 1000) {
+    printOriginalSoundLevel();
     commutationCounter = 0;
-  }
+    }*/
 }
 void bldc_move() {       // BLDC motor commutation function
   switch (bldc_step) {
@@ -81,17 +95,17 @@ void bldc_move() {       // BLDC motor commutation function
 
 void loop() {
   SET_PWM_DUTY(PWM_START_DUTY);    // Setup starting PWM with duty cycle = PWM_START_DUTY
-  unsigned int i = 5000;
   // Motor start
-  while (i > 100) {
-    delayMicroseconds(i);
+  
+  unsigned int i = 5000;
+  while (i > 20) {
     bldc_move();
-    bldc_step++;
-    bldc_step %= 6;
-    i = i - 20;
+    bldc_step = (bldc_step + 1) % 6;
+    delayMicroseconds(i);
+    i -= 30;
   }
-  pwm_duty = PWM_START_DUTY;
-  ACSR |= 0x08;                    // Enable analog comparator interrupt
+  
+  ACSR |= 0x08; // Enable analog comparator interrupt
   while (1) {
     while (!(digitalRead(SPEED_UP)) && pwm_duty < PWM_MAX_DUTY) {
       pwm_duty++;
@@ -103,6 +117,35 @@ void loop() {
       SET_PWM_DUTY(pwm_duty);
       delay(100);
     }
+
+    // Noise Canceling Algorithm
+    // for (iarr = 0; iarr < ARRLEN; iarr++)
+    /* {
+      int direction = 1;
+      int loseDiff;
+      int v = 1;
+      lose = Loss();
+      //printf("\n iarr: %u, Loss %d ", iarr, lose);
+      for (size_t iInnerEpoch = 0; iInnerEpoch < innerEpoch; iInnerEpoch++)
+      {
+        uint8_t oldCurPwm = pwm[iarr];
+        pwm[iarr] = max(min((int)oldCurPwm + v, 255), 0);
+        int newLose = Loss();
+        loseDiff = newLose - lose;
+        //printf("%d ", newLose);
+        if (loseDiff >= 0)
+        {
+          pwm[iarr] = oldCurPwm;
+          direction = -direction;
+        }
+        lose = newLose;
+        if (loseDiff == 0)
+          break;
+        v = direction * abs(loseDiff);
+      }
+      }
+      iarr = (iarr + 1) & ~ARRLEN; // (iarr + 1) % ARRLEN
+    */
   }
 }
 
