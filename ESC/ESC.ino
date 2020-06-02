@@ -1,13 +1,24 @@
 // https://simple-circuit.com/arduino-brushless-dc-motor-controller/
 
-#define SPEED_UP          A0          // BLDC motor speed-up button
-#define SPEED_DOWN        A1          // BLDC motor speed-down button
+#define SPEED_UP          A0 // BLDC motor speed-up button
+#define SPEED_DOWN        A1 // BLDC motor speed-down button
+#define SoundSensorPin    A5 // this pin read the analog voltage from the sound level meter
 #define PWM_MAX_DUTY      255
 #define PWM_MIN_DUTY      50
 #define PWM_START_DUTY    100
+#define VREF              5.0// voltage on AREF pin,default:operating voltage
 
-byte bldc_step = 0, motor_speed;
-unsigned int i;
+float getDbValue(){
+  return analogRead(SoundSensorPin) / 1024.0 * VREF * 50.0;
+}
+void printDbValue(){
+  Serial.print(getDbValue(), 1); // print to 1 decimal places
+  Serial.println(" dBA");
+}
+
+byte bldc_step = 0, pwm_duty;
+unsigned int commutationCounter=0;
+
 void setup() {
   DDRB = 0b1110;   // Configure pins 9(OC1A), 10(OC1B) and 11(OC2A) as outputs.  Used as PWM pins.
   DDRD = 0b111000; // Configure pins 3, 4 and 5 as outputs.  Use as normal pins.
@@ -22,6 +33,8 @@ void setup() {
   ACSR   = 0x10;           // Disable and clear (flag bit) analog comparator interrupt
   pinMode(SPEED_UP,   INPUT_PULLUP);
   pinMode(SPEED_DOWN, INPUT_PULLUP);
+
+  Serial.begin(115200);
 }
 // Analog comparator ISR
 ISR (ANALOG_COMP_vect) {
@@ -32,6 +45,10 @@ ISR (ANALOG_COMP_vect) {
   }
   bldc_move();
   bldc_step = (bldc_step + 1) % 6;
+  if(++commutationCounter>1000){
+    printDbValue();
+    commutationCounter = 0;
+  }
 }
 void bldc_move() {       // BLDC motor commutation function
   switch (bldc_step) {
@@ -64,7 +81,7 @@ void bldc_move() {       // BLDC motor commutation function
 
 void loop() {
   SET_PWM_DUTY(PWM_START_DUTY);    // Setup starting PWM with duty cycle = PWM_START_DUTY
-  i = 5000;
+  unsigned int i = 5000;
   // Motor start
   while (i > 100) {
     delayMicroseconds(i);
@@ -73,17 +90,17 @@ void loop() {
     bldc_step %= 6;
     i = i - 20;
   }
-  motor_speed = PWM_START_DUTY;
+  pwm_duty = PWM_START_DUTY;
   ACSR |= 0x08;                    // Enable analog comparator interrupt
   while (1) {
-    while (!(digitalRead(SPEED_UP)) && motor_speed < PWM_MAX_DUTY) {
-      motor_speed++;
-      SET_PWM_DUTY(motor_speed);
+    while (!(digitalRead(SPEED_UP)) && pwm_duty < PWM_MAX_DUTY) {
+      pwm_duty++;
+      SET_PWM_DUTY(pwm_duty);
       delay(100);
     }
-    while (!(digitalRead(SPEED_DOWN)) && motor_speed > PWM_MIN_DUTY) {
-      motor_speed--;
-      SET_PWM_DUTY(motor_speed);
+    while (!(digitalRead(SPEED_DOWN)) && pwm_duty > PWM_MIN_DUTY) {
+      pwm_duty--;
+      SET_PWM_DUTY(pwm_duty);
       delay(100);
     }
   }
