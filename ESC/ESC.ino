@@ -1,51 +1,16 @@
 // https://simple-circuit.com/arduino-brushless-dc-motor-controller/
 
-#define SPEED_UP          A0 // BLDC motor speed-up button
-#define SPEED_DOWN        A1 // BLDC motor speed-down button
 #define SoundSensorPin    A5 // this pin read the analog voltage from the sound level meter
-#define PWM_MAX_DUTY     255
-#define PWM_MIN_DUTY       0
-#define PWM_START_DUTY    30
+#define PWM_START_DUTY    70
 #define ARRLEN            64
-#define VREF             5.0 // voltage on AREF pin,default:operating voltage
 #define NUM_DEBOUNCE_CHECK_LOW_SPEED 32;
 #define NUM_DEBOUNCE_CHECK_HIGH_SPEED 8; // Lower this number can gain a little more maximum motor speed
 
-// Seems like analogRead() can cause motor to be unable to spin stably.
-#define getOriginalSoundLevel analogRead(SoundSensorPin) // (int) 0 ~ 1023
-
-float getDbValue() {
-  return getOriginalSoundLevel / 1024.0 * VREF * 50.0;
-}
-void printDbValue() {
-  Serial.print(getDbValue(), 1); // print to 1 decimal places
-  Serial.println(" dBA");
-}
-void printOriginalSoundLevel() {
-  Serial.println(getOriginalSoundLevel);
-}
-int prevSoundLevel = 0;
-void blinkSoundlevelChange() {
-  int curSoundLevel = getOriginalSoundLevel;
-  if (curSoundLevel == prevSoundLevel) {
-    digitalWrite(LED_BUILTIN, LOW);
-  } else {
-    digitalWrite(LED_BUILTIN, HIGH);
-    prevSoundLevel = curSoundLevel;
-  }
-}
-
-int Loss() {
-  return getOriginalSoundLevel;
-}
-
-byte bldc_step = 0, pwm_duty = PWM_START_DUTY;
+byte bldc_step = 0, torque = PWM_START_DUTY;
 byte pwm[ARRLEN];
+size_t indexPwm = 0;
 unsigned int isr_bldc_moveCount = 0;
 unsigned int numDebounceCheck = NUM_DEBOUNCE_CHECK_LOW_SPEED;
-int innerEpoch = 5, lose;
-size_t iarr = 0;
-unsigned long ms = 0;
 
 // Analog comparator ISR
 ISR (ANALOG_COMP_vect) {
@@ -55,17 +20,32 @@ ISR (ANALOG_COMP_vect) {
       return;
   }
 
+  SET_PWM_DUTY(pwm[0]);
+  indexPwm = 1;
   bldc_move();
   ++isr_bldc_moveCount;
 }
+
+int a = 0;
+ISR(TIMER1_OVF_vect){
+  Serial.println("I");
+  ++a;
+}
+ISR(TIMER2_OVF_vect){
+  Serial.println("I");
+  ++a;
+}
 void bldc_move() { // BLDC motor commutation function
+  // Serial.println(a);
+  a = 0;
+  noInterrupts();
   switch (bldc_step) {
-    case 0: AH_BL(); BEMF_C_RISE(); ++bldc_step; return;
-    case 1: AH_CL(); BEMF_B_FALL(); ++bldc_step; return;
-    case 2: BH_CL(); BEMF_A_RISE(); ++bldc_step; return;
-    case 3: BH_AL(); BEMF_C_FALL(); ++bldc_step; return;
-    case 4: CH_AL(); BEMF_B_RISE(); ++bldc_step; return;
-    case 5: CH_BL(); BEMF_A_FALL(); bldc_step = 0; return;
+    case 0: AH_BL(); BEMF_C_RISE(); ++bldc_step; interrupts(); return;
+    case 1: AH_CL(); BEMF_B_FALL(); ++bldc_step; interrupts(); return;
+    case 2: BH_CL(); BEMF_A_RISE(); ++bldc_step; interrupts(); return;
+    case 3: BH_AL(); BEMF_C_FALL(); ++bldc_step; interrupts(); return;
+    case 4: CH_AL(); BEMF_B_RISE(); ++bldc_step; interrupts(); return;
+    case 5: CH_BL(); BEMF_A_FALL(); bldc_step = 0; interrupts(); return;
   }
 }
 
@@ -76,10 +56,13 @@ void setup() {
   TCCR1B = 1; // Timer1 no prescaling
   TCCR2B = 1; // Timer2 no prescaling
 
-  pinMode(SPEED_UP,   INPUT_PULLUP);
-  pinMode(SPEED_DOWN, INPUT_PULLUP);
+  // TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
+  // TIMSK1 |= (1 << OCIE1B); // enable timer compare interrupt
+  // TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt
+  //  TIMSK1 = (1 << TOIE1); // enable timer overflow interrupt
+  //  TIMSK2 = (1 << TOIE2); // enable timer overflow interrupt
+
   pinMode(LED_BUILTIN, OUTPUT);
-  //pinMode(SoundSensorPin, INPUT);
 
   // Analog comparator setting
   //ACSR = 1 << ACI; // Disable and clear (flag bit) analog comparator interrupt
@@ -87,68 +70,55 @@ void setup() {
 
   SET_PWM_DUTY(PWM_START_DUTY);    // Setup starting PWM with duty cycle = PWM_START_DUTY
   Serial.begin(9600);
+
+  // init pwm array
+  const int step = 1, nSteps=20;
+  int curDuty = PWM_START_DUTY-step*nSteps;
+  size_t i = 0;
+  for (; i < nSteps; ++i) {
+    curDuty += step;
+    pwm[i] = curDuty;
+  }
+  for (; i < ARRLEN - nSteps; ++i) {
+    pwm[i] = curDuty;
+  }
+  for (; i < ARRLEN; ++i) {
+    curDuty -= step;
+    pwm[i] = curDuty;
+  }
 }
 void loop() {
-
-  if (pwm_duty == 0) {
+  if (torque == 0) {
     digitalWrite(LED_BUILTIN, HIGH);
     ACSR = 1 << ACI;
     MOTOR_IDLE();
   } else {
     digitalWrite(LED_BUILTIN, LOW);
-    //Serial.println(isr_bldc_moveCount);
     if (isr_bldc_moveCount == 0) {
       // Motor start
       ACSR = 1 << ACIE;
+      SET_PWM_DUTY(PWM_START_DUTY);
       bldc_move();
+      delay(30);
     } else {
+      //SET_PWM_DUTY(pwm[indexPwm]);
       if (isr_bldc_moveCount > 60) {
         numDebounceCheck = NUM_DEBOUNCE_CHECK_HIGH_SPEED;
       } else {
         numDebounceCheck = NUM_DEBOUNCE_CHECK_LOW_SPEED;
       }
       isr_bldc_moveCount = 0;
+      if (indexPwm < ARRLEN - 1)
+        ++indexPwm;
+      delay(30);
     }
   }
 
-  if (pwm_duty < PWM_MAX_DUTY && !(digitalRead(SPEED_UP))) {
-    SET_PWM_DUTY(++pwm_duty);
-  }
-  if (pwm_duty > PWM_MIN_DUTY && !(digitalRead(SPEED_DOWN))) {
-    SET_PWM_DUTY(--pwm_duty);
-  }
+  // while (Serial.available()) {
+  //   torque = Serial.read();
+  // }
 
-  //printOriginalSoundLevel();
-  delay(30);
-
-  // Noise Canceling Algorithm
-  // for (iarr = 0; iarr < ARRLEN; iarr++)
-  /* {
-    int direction = 1;
-    int loseDiff;
-    int v = 1;
-    lose = Loss();
-    //printf("\n iarr: %u, Loss %d ", iarr, lose);
-    for (size_t iInnerEpoch = 0; iInnerEpoch < innerEpoch; iInnerEpoch++)
-    {
-      uint8_t oldCurPwm = pwm[iarr];
-      pwm[iarr] = max(min((int)oldCurPwm + v, 255), 0);
-      int newLose = Loss();
-      loseDiff = newLose - lose;
-      //printf("%d ", newLose);
-      if (loseDiff >= 0)
-      {
-        pwm[iarr] = oldCurPwm;
-        direction = -direction;
-      }
-      lose = newLose;
-      if (loseDiff == 0)
-        break;
-      v = direction * abs(loseDiff);
-    }
-    }
-    iarr = (iarr + 1) & ~ARRLEN; // (iarr + 1) % ARRLEN
-  */
+  //delay(30);
 }
 
 void BEMF_A_RISE() {
