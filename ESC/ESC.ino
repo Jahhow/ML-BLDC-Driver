@@ -2,7 +2,7 @@
 
 #define SoundSensorPin    A5 // this pin read the analog voltage from the sound level meter
 #define PWM_START_DUTY    70
-#define ARRLEN            64
+#define ARRLEN            32
 #define NUM_DEBOUNCE_CHECK_LOW_SPEED 8;
 #define NUM_DEBOUNCE_CHECK_HIGH_SPEED 8; // Lower this number can gain a little more maximum motor speed
 
@@ -11,6 +11,7 @@ byte pwm[ARRLEN];
 size_t indexPwm = 0;
 unsigned int isr_bldc_moveCount = 0;
 unsigned int numDebounceCheck = NUM_DEBOUNCE_CHECK_LOW_SPEED;
+int finalIndexPwm;
 
 // Analog comparator ISR
 ISR (ANALOG_COMP_vect) {
@@ -19,20 +20,20 @@ ISR (ANALOG_COMP_vect) {
     if ((bldc_step & 1) != ((ACSR >> ACO) & 1))
       return;
   }
-
-  SET_PWM_DUTY(pwm[0]);
+  finalIndexPwm = indexPwm;
+  if(TIMSK1)
+    SET_PWM_DUTY(pwm[0]);
   indexPwm = 1;
   bldc_move();
   ++isr_bldc_moveCount;
 }
 
-int a = 0;
 ISR(TIMER1_OVF_vect){
-  ++a;
+  SET_PWM_DUTY(pwm[indexPwm]);
+  if (indexPwm < ARRLEN - 1)
+    ++indexPwm;
 }
-ISR(TIMER2_OVF_vect){
-  ++a;
-}
+
 void bldc_move() { // BLDC motor commutation function
   noInterrupts();
   switch (bldc_step) {
@@ -68,8 +69,9 @@ void setup() {
   SET_PWM_DUTY(PWM_START_DUTY);    // Setup starting PWM with duty cycle = PWM_START_DUTY
 
   // init pwm array
-  const int step = 1, nSteps=20;
-  int curDuty = PWM_START_DUTY-step*nSteps;
+  const int nSteps=10;
+  const int step = PWM_START_DUTY/nSteps;
+  int curDuty = PWM_START_DUTY-step*nSteps/2;
   size_t i = 0;
   for (; i < nSteps; ++i) {
     curDuty += step;
@@ -94,63 +96,60 @@ void loop() {
     if (isr_bldc_moveCount == 0) {
       // Motor start
       ACSR = 1 << ACIE;
+      TIMSK1 = 0; // disable timer overflow interrupt
       SET_PWM_DUTY(PWM_START_DUTY);
       bldc_move();
-      delay(30);
     } else {
-      //SET_PWM_DUTY(pwm[indexPwm]);
+      TIMSK1 = (1 << TOIE1); // enable timer overflow interrupt
       if (isr_bldc_moveCount > 60) {
         numDebounceCheck = NUM_DEBOUNCE_CHECK_HIGH_SPEED;
       } else {
         numDebounceCheck = NUM_DEBOUNCE_CHECK_LOW_SPEED;
       }
       isr_bldc_moveCount = 0;
-      if (indexPwm < ARRLEN - 1)
-        ++indexPwm;
-      delay(30);
     }
   }
-  Serial.println(a);
-  a = 0;
+
+  Serial.println(finalIndexPwm);
 
   // while (Serial.available()) {
   //   torque = Serial.read();
   // }
 
-  //delay(30);
+  delay(30);
 }
 
 void BEMF_A_RISE() {
   ADCSRB = 0;    // Select AIN1 (Pin7) as comparator negative input
-  ACSR |= 3;            // Set interrupt on rising edge
+  //ACSR |= 3;            // Set interrupt on rising edge
 }
 void BEMF_A_FALL() {
   ADCSRB = 0;    // Select AIN1 (Pin7) as comparator negative input
-  ACSR &= ~1;           // Set interrupt on falling edge
+  //ACSR &= ~1;           // Set interrupt on falling edge
 }
 void BEMF_B_RISE() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 2;              // Select analog channel 2 (A2) as comparator negative input
-  ACSR |= 3;
+  //ACSR |= 3;
 }
 void BEMF_B_FALL() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 2;              // Select analog channel 2 (A2) as comparator negative input
-  ACSR &= ~1;
+  //ACSR &= ~1;
 }
 void BEMF_C_RISE() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 3;              // Select analog channel 3 (A3) as comparator negative input
-  ACSR |= 3;
+  //ACSR |= 3;
 }
 void BEMF_C_FALL() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 3;              // Select analog channel 3 (A3) as comparator negative input
-  ACSR &= ~1;
+  //ACSR &= ~1;
 }
 
 /////////////////////////////////////////////////////////////
