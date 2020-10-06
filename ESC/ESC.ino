@@ -3,7 +3,7 @@
 #define SoundSensorPin    A5 // this pin read the analog voltage from the sound level meter
 #define PWM_START_DUTY    70
 #define ARRLEN            64
-#define NUM_DEBOUNCE_CHECK_LOW_SPEED 32;
+#define NUM_DEBOUNCE_CHECK_LOW_SPEED 8;
 #define NUM_DEBOUNCE_CHECK_HIGH_SPEED 8; // Lower this number can gain a little more maximum motor speed
 
 byte bldc_step = 0, torque = PWM_START_DUTY;
@@ -28,16 +28,12 @@ ISR (ANALOG_COMP_vect) {
 
 int a = 0;
 ISR(TIMER1_OVF_vect){
-  Serial.println("I");
   ++a;
 }
 ISR(TIMER2_OVF_vect){
-  Serial.println("I");
   ++a;
 }
 void bldc_move() { // BLDC motor commutation function
-  // Serial.println(a);
-  a = 0;
   noInterrupts();
   switch (bldc_step) {
     case 0: AH_BL(); BEMF_C_RISE(); ++bldc_step; interrupts(); return;
@@ -53,14 +49,14 @@ void setup() {
   DDRB = 0b1110;   // Configure pins 9(OC1A), 10(OC1B) and 11(OC2A) as outputs.  Use as PWM pins.
   DDRD = 0b111000; // Configure pins 3, 4 and 5 as outputs.  Use as normal pins.
 
-  TCCR1B = 1; // Timer1 no prescaling
+  TCCR1B = 1 | (1<<WGM12); // Timer1 no prescaling
   TCCR2B = 1; // Timer2 no prescaling
 
   // TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
   // TIMSK1 |= (1 << OCIE1B); // enable timer compare interrupt
   // TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt
-  //  TIMSK1 = (1 << TOIE1); // enable timer overflow interrupt
-  //  TIMSK2 = (1 << TOIE2); // enable timer overflow interrupt
+  TIMSK1 = (1 << TOIE1); // enable timer overflow interrupt
+  //TIMSK2 = (1 << TOIE2); // enable timer overflow interrupt
 
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -113,6 +109,8 @@ void loop() {
       delay(30);
     }
   }
+  //Serial.println(a);
+  //a = 0;
 
   // while (Serial.available()) {
   //   torque = Serial.read();
@@ -123,35 +121,35 @@ void loop() {
 
 void BEMF_A_RISE() {
   ADCSRB = 0;    // Select AIN1 (Pin7) as comparator negative input
-  //ACSR |= 3;            // Set interrupt on rising edge
+  ACSR |= 3;            // Set interrupt on rising edge
 }
 void BEMF_A_FALL() {
   ADCSRB = 0;    // Select AIN1 (Pin7) as comparator negative input
-  //ACSR &= ~1;           // Set interrupt on falling edge
+  ACSR &= ~1;           // Set interrupt on falling edge
 }
 void BEMF_B_RISE() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 2;              // Select analog channel 2 (A2) as comparator negative input
-  //ACSR |= 3;
+  ACSR |= 3;
 }
 void BEMF_B_FALL() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 2;              // Select analog channel 2 (A2) as comparator negative input
-  //ACSR &= ~1;
+  ACSR &= ~1;
 }
 void BEMF_C_RISE() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 3;              // Select analog channel 3 (A3) as comparator negative input
-  //ACSR |= 3;
+  ACSR |= 3;
 }
 void BEMF_C_FALL() {
   ADCSRA = 0;   // Disable the ADC module
   ADCSRB = (1 << ACME);
   ADMUX = 3;              // Select analog channel 3 (A3) as comparator negative input
-  //ACSR &= ~1;
+  ACSR &= ~1;
 }
 
 /////////////////////////////////////////////////////////////
@@ -159,12 +157,12 @@ void BEMF_C_FALL() {
 void AH_BL() {
   PORTD  = 1 << 4; // pin 4 on
   TCCR1A = 0;            // pin 9, 10 OFF
-  TCCR2A = 0x81;         // pin 11 (OC2A) PWM ON
+  TCCR2A = 0x81 | (1<<WGM21);         // pin 11 (OC2A) PWM ON
 }
 void AH_CL() {
   PORTD  = 1 << 3; // pin 3 on
   TCCR1A = 0;
-  TCCR2A = 0x81;
+  TCCR2A = 0x81 | (1<<WGM21);
 }
 
 void BH_CL() {
