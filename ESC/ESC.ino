@@ -48,15 +48,16 @@ void bldc_move() { // BLDC motor commutation function
 void setup() {
   DDRB = 0b1110;   // Configure pins 9(OC1A), 10(OC1B) and 11(OC2A) as outputs.  Use as PWM pins.
   DDRD = 0b111000; // Configure pins 3, 4 and 5 as outputs.  Use as normal pins.
+  
+  // Timer1 no prescaling, Fast PWM
+  TCCR1A = 1;         // pin 11 (OC2A) PWM OFF
+  TCCR1B = 1 | (1<<WGM12); // Timer1 no prescaling, Fast PWM
 
-  TCCR1B = 1 | (1<<WGM12); // Timer1 no prescaling
+  // Timer2 no prescaling, Fast PWM
+  TCCR2A = 1 | (1<<WGM21);         // pin 11 (OC2A) PWM OFF
   TCCR2B = 1; // Timer2 no prescaling
 
-  // TIMSK1 |= (1 << OCIE1A); // enable timer compare interrupt
-  // TIMSK1 |= (1 << OCIE1B); // enable timer compare interrupt
-  // TIMSK2 |= (1 << OCIE2A); // enable timer compare interrupt
   TIMSK1 = (1 << TOIE1); // enable timer overflow interrupt
-  //TIMSK2 = (1 << TOIE2); // enable timer overflow interrupt
 
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -65,7 +66,6 @@ void setup() {
   ACSR = 1 << ACIE; // Enable Analog Comparator Interrupt
 
   SET_PWM_DUTY(PWM_START_DUTY);    // Setup starting PWM with duty cycle = PWM_START_DUTY
-  Serial.begin(9600);
 
   // init pwm array
   const int step = 1, nSteps=20;
@@ -82,11 +82,12 @@ void setup() {
     curDuty -= step;
     pwm[i] = curDuty;
   }
+  Serial.begin(9600);
 }
 void loop() {
   if (torque == 0) {
     digitalWrite(LED_BUILTIN, HIGH);
-    ACSR = 1 << ACI;
+    ACSR = 1 << ACI; // Disable and clear (flag bit) analog comparator interrupt
     MOTOR_IDLE();
   } else {
     digitalWrite(LED_BUILTIN, LOW);
@@ -109,8 +110,8 @@ void loop() {
       delay(30);
     }
   }
-  //Serial.println(a);
-  //a = 0;
+  Serial.println(a);
+  a = 0;
 
   // while (Serial.available()) {
   //   torque = Serial.read();
@@ -156,35 +157,35 @@ void BEMF_C_FALL() {
 
 void AH_BL() {
   PORTD  = 1 << 4; // pin 4 on
-  TCCR1A = 0;            // pin 9, 10 OFF
+  TCCR1A = 1;            // pin 9, 10 OFF
   TCCR2A = 0x81 | (1<<WGM21);         // pin 11 (OC2A) PWM ON
 }
 void AH_CL() {
   PORTD  = 1 << 3; // pin 3 on
-  TCCR1A = 0;
+  TCCR1A = 1;
   TCCR2A = 0x81 | (1<<WGM21);
 }
 
 void BH_CL() {
   PORTD  = 1 << 3; // pin 3 on
   TCCR1A = 0x21;         // pin 9  OFF, pin 10 (OC1B) PWM ON,
-  TCCR2A = 0;            // pin 11 OFF
+  TCCR2A = 0x1 | (1<<WGM21);     // pin 11 OFF
 }
 void BH_AL() {
   PORTD  = 1 << 5; // pin 5 on
   TCCR1A = 0x21;
-  TCCR2A = 0;
+  TCCR2A = 0x1 | (1<<WGM21);     // pin 11 OFF
 }
 
 void CH_AL() {
   PORTD  = 1 << 5; // pin 5 on
   TCCR1A = 0x81;         // pin 9 (OC1A) PWM ON, pin 10 OFF
-  TCCR2A = 0;            // pin 11 OFF
+  TCCR2A = 0x1 | (1<<WGM21);     // pin 11 OFF
 }
 void CH_BL() {
   PORTD  = 1 << 4; // pin 4 on
   TCCR1A = 0x81;
-  TCCR2A = 0;
+  TCCR2A = 0x1 | (1<<WGM21);     // pin 11 OFF
 }
 void MOTOR_IDLE() {
   PORTD  = 0; // pin 3, 4, 5 OFF
