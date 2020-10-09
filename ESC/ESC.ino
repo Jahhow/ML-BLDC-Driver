@@ -11,7 +11,7 @@ byte pwm[ARRLEN];
 size_t indexPwm = 0;
 unsigned int isr_bldc_moveCount = 0, isr_bldc_moveCount2 = 0;
 unsigned int numDebounceCheck = NUM_DEBOUNCE_CHECK_LOW_SPEED;
-int ovfCount = 0;
+int spinPeriod, ovfCount = 0;
 
 // Analog comparator ISR
 ISR (ANALOG_COMP_vect) {
@@ -113,7 +113,11 @@ void loop() {
   }
 
   if (++i > 5) {
-    Serial.println(ovfCount / isr_bldc_moveCount2);
+    int newSpinPeriod = ovfCount / isr_bldc_moveCount2;
+    if(newSpinPeriod != spinPeriod){
+      Serial.println(newSpinPeriod);
+      spinPeriod = newSpinPeriod;
+    }
     ovfCount = 0;
     isr_bldc_moveCount2 = 0;
     i = 0;
