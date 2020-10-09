@@ -114,8 +114,13 @@ void loop() {
 
   if (++i > 5) {
     int newSpinPeriod = ovfCount / isr_bldc_moveCount2;
+    if(newSpinPeriod>1000)
+      newSpinPeriod = -1;
     if(newSpinPeriod != spinPeriod){
-      Serial.println(newSpinPeriod);
+      if(newSpinPeriod<0)
+        Serial.println("∞");
+      else
+        Serial.println(newSpinPeriod);
       spinPeriod = newSpinPeriod;
     }
     ovfCount = 0;
