@@ -70,7 +70,7 @@ void setup() {
   SET_PWM_DUTY(PWM_START_DUTY);    // Setup starting PWM with duty cycle = PWM_START_DUTY
 
   // init pwm array
-  const int nSteps = 10;
+  const int nSteps = 0;
   const int step = PWM_START_DUTY / nSteps;
   int curDuty = PWM_START_DUTY - step * nSteps / 2;
   size_t i = 0;
@@ -128,9 +128,9 @@ void loop() {
     i = 0;
   }
 
-  // while (Serial.available()) {
-  //   torque = Serial.read();
-  // }
+  if (Serial.available() >= ARRLEN) {
+    Serial.readBytes(pwm,ARRLEN);
+  }
 
   delay(30);
 }
